@@ -1,0 +1,16 @@
+
+> studyforge@0.1.0 build
+> prisma generate && next build
+
+
+✔ Generated Prisma Client (v7.4.0) to .\node_modules\@prisma\client in 909ms
+
+Start by importing your Prisma Client (See: https://pris.ly/d/importing-client)
+
+
+▲ Next.js 16.1.6 (Turbopack)
+- Environments: .env.local
+
+  Creating an optimized production build ...
+✓ Compiled successfully in 49s
+  Running TypeScript ...
