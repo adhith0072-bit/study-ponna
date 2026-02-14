@@ -4,6 +4,9 @@ import { motion } from "framer-motion";
 import { Zap, Mail, Lock, ArrowRight, Eye, EyeOff } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { signIn } from "next-auth/react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
@@ -14,13 +17,31 @@ export default function LoginPage() {
     const [password, setPassword] = useState("");
     const [isLoading, setIsLoading] = useState(false);
 
+    const router = useRouter();
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setIsLoading(true);
-        // TODO: wire NextAuth signIn
-        setTimeout(() => {
-            window.location.href = "/study-sets";
-        }, 1000);
+
+        try {
+            const result = await signIn("credentials", {
+                email,
+                password,
+                redirect: false,
+            });
+
+            if (result?.error) {
+                toast.error("Invalid email or password");
+            } else {
+                toast.success("Logged in successfully!");
+                router.push("/dashboard"); // or /study-sets
+                router.refresh();
+            }
+        } catch (error) {
+            toast.error("Something went wrong");
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     return (
@@ -61,9 +82,7 @@ export default function LoginPage() {
                         <Button
                             variant="outline"
                             className="w-full mb-6 h-12 gap-3"
-                            onClick={() => {
-                                // TODO: signIn("google")
-                            }}
+                            onClick={() => signIn("google", { callbackUrl: "/dashboard" })}
                         >
                             <svg className="w-5 h-5" viewBox="0 0 24 24">
                                 <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" />
