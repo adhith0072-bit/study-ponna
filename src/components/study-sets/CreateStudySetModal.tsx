@@ -16,6 +16,8 @@ import {
     ArrowLeft,
     Loader2,
 } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import {
     Dialog,
     DialogContent,
@@ -60,6 +62,15 @@ export function CreateStudySetModal({ open, onOpenChange }: CreateStudySetModalP
     const [isPublic, setIsPublic] = useState(false);
     const [isGenerating, setIsGenerating] = useState(false);
     const [generationSteps, setGenerationSteps] = useState<string[]>([]);
+    const [file, setFile] = useState<File | null>(null);
+
+    const fileInputRef = useRef<HTMLInputElement>(null);
+
+    const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (e.target.files && e.target.files[0]) {
+            setFile(e.target.files[0]);
+        }
+    };
 
     const resetForm = () => {
         setStep(1);
@@ -71,34 +82,87 @@ export function CreateStudySetModal({ open, onOpenChange }: CreateStudySetModalP
         setPastedText("");
         setFlashcardCount(20);
         setIsGenerating(false);
+        setFile(null);
         setGenerationSteps([]);
     };
 
+    const router = useRouter();
+
     const handleGenerate = async () => {
-        setStep(4);
-        setIsGenerating(true);
-
-        const steps = [
-            "Parsing content...",
-            "Extracting key concepts...",
-            "Generating flashcards...",
-            "Creating quiz questions...",
-            "Writing study notes...",
-            "Finalizing study set...",
-        ];
-
-        for (const s of steps) {
-            await new Promise((resolve) => setTimeout(resolve, 800));
-            setGenerationSteps((prev) => [...prev, s]);
+        if (!title) {
+            toast.error("Please enter a title");
+            return;
         }
 
-        setIsGenerating(false);
-        // In production, redirect to the new study set
-        setTimeout(() => {
-            onOpenChange(false);
-            resetForm();
-            window.location.href = "/study-sets/demo-1";
-        }, 500);
+        setStep(4);
+        setIsGenerating(true);
+        setGenerationSteps(["Initializing..."]);
+
+        try {
+            const formData = new FormData();
+            formData.append("sourceType", sourceType);
+            formData.append("title", title);
+            formData.append("subject", subject);
+            formData.append("flashcardCount", flashcardCount.toString());
+
+            if (file) {
+                formData.append("file", file);
+            }
+            if (youtubeUrl) {
+                formData.append("url", youtubeUrl);
+            }
+            if (websiteUrl) {
+                formData.append("url", websiteUrl);
+            }
+            if (pastedText) {
+                formData.append("text", pastedText);
+            }
+
+            // Simulate progress while request is pending
+            const progressInterval = setInterval(() => {
+                setGenerationSteps((prev) => {
+                    const steps = [
+                        "Parsing content...",
+                        "Extracting key concepts...",
+                        "Generating flashcards...",
+                        "Creating quiz questions...",
+                        "Finalizing study set...",
+                    ];
+                    const nextStep = steps[prev.length % steps.length];
+                    return [...prev, nextStep];
+                });
+            }, 2000);
+
+            const response = await fetch("/api/study-sets", {
+                method: "POST",
+                body: formData,
+            });
+
+            clearInterval(progressInterval);
+
+            if (!response.ok) {
+                const errorData = await response.text();
+                throw new Error(errorData || "Failed to generate study set");
+            }
+
+            const data = await response.json();
+
+            setGenerationSteps((prev) => [...prev, "Done! Redirecting..."]);
+
+            setTimeout(() => {
+                onOpenChange(false);
+                resetForm();
+                router.push(`/study-sets/${data.studySet.id}`);
+                router.refresh();
+            }, 1000);
+
+        } catch (error) {
+            console.error(error);
+            toast.error("Failed to generate study set. Please try again.");
+            setStep(3); // Go back to config step
+        } finally {
+            setIsGenerating(false);
+        }
     };
 
     return (
@@ -130,10 +194,10 @@ export function CreateStudySetModal({ open, onOpenChange }: CreateStudySetModalP
                             <div key={s} className="flex items-center gap-2 flex-1">
                                 <div
                                     className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all ${s < step
-                                            ? "bg-primary text-white"
-                                            : s === step
-                                                ? "bg-primary/20 text-primary border-2 border-primary"
-                                                : "bg-white/5 text-muted-foreground"
+                                        ? "bg-primary text-white"
+                                        : s === step
+                                            ? "bg-primary/20 text-primary border-2 border-primary"
+                                            : "bg-white/5 text-muted-foreground"
                                         }`}
                                 >
                                     {s < step ? <Check className="w-4 h-4" /> : s}
@@ -167,8 +231,8 @@ export function CreateStudySetModal({ open, onOpenChange }: CreateStudySetModalP
                                         setStep(2);
                                     }}
                                     className={`flex flex-col items-center gap-2 p-4 rounded-xl border transition-all cursor-pointer hover:scale-[1.02] ${sourceType === source.id
-                                            ? "border-primary bg-primary/10"
-                                            : "border-white/10 bg-white/5 hover:bg-white/10 hover:border-white/20"
+                                        ? "border-primary bg-primary/10"
+                                        : "border-white/10 bg-white/5 hover:bg-white/10 hover:border-white/20"
                                         }`}
                                 >
                                     <div
@@ -193,18 +257,38 @@ export function CreateStudySetModal({ open, onOpenChange }: CreateStudySetModalP
                         >
                             {sourceType === "PDF" && (
                                 <div
-                                    className="border-2 border-dashed border-white/20 rounded-xl p-8 text-center hover:border-primary/50 transition-colors cursor-pointer"
-                                    onClick={() => {
-                                        // TODO: trigger file input
-                                    }}
+                                    className={`border-2 border-dashed rounded-xl p-8 text-center transition-colors cursor-pointer ${file ? "border-primary bg-primary/5" : "border-white/20 hover:border-primary/50"
+                                        }`}
+                                    onClick={() => fileInputRef.current?.click()}
                                 >
-                                    <Upload className="w-10 h-10 mx-auto mb-3 text-muted-foreground" />
-                                    <p className="text-sm font-medium mb-1">
-                                        Drag & drop your PDF here
-                                    </p>
-                                    <p className="text-xs text-muted-foreground">
-                                        or click to browse (max 50MB)
-                                    </p>
+                                    <input
+                                        type="file"
+                                        accept=".pdf"
+                                        className="hidden"
+                                        ref={fileInputRef}
+                                        onChange={handleFileSelect}
+                                    />
+                                    {file ? (
+                                        <>
+                                            <FileText className="w-10 h-10 mx-auto mb-3 text-primary" />
+                                            <p className="text-sm font-medium mb-1 text-primary">
+                                                {file.name}
+                                            </p>
+                                            <p className="text-xs text-muted-foreground">
+                                                {(file.size / 1024 / 1024).toFixed(2)} MB
+                                            </p>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Upload className="w-10 h-10 mx-auto mb-3 text-muted-foreground" />
+                                            <p className="text-sm font-medium mb-1">
+                                                Click to upload PDF
+                                            </p>
+                                            <p className="text-xs text-muted-foreground">
+                                                max 50MB
+                                            </p>
+                                        </>
+                                    )}
                                 </div>
                             )}
 
@@ -232,15 +316,38 @@ export function CreateStudySetModal({ open, onOpenChange }: CreateStudySetModalP
 
                             {sourceType === "AUDIO" && (
                                 <div
-                                    className="border-2 border-dashed border-white/20 rounded-xl p-8 text-center hover:border-primary/50 transition-colors cursor-pointer"
+                                    className={`border-2 border-dashed rounded-xl p-8 text-center transition-colors cursor-pointer ${file ? "border-primary bg-primary/5" : "border-white/20 hover:border-primary/50"
+                                        }`}
+                                    onClick={() => fileInputRef.current?.click()}
                                 >
-                                    <Mic className="w-10 h-10 mx-auto mb-3 text-muted-foreground" />
-                                    <p className="text-sm font-medium mb-1">
-                                        Upload audio file
-                                    </p>
-                                    <p className="text-xs text-muted-foreground">
-                                        MP3, WAV, M4A (max 25MB)
-                                    </p>
+                                    <input
+                                        type="file"
+                                        accept="audio/*"
+                                        className="hidden"
+                                        ref={fileInputRef}
+                                        onChange={handleFileSelect}
+                                    />
+                                    {file ? (
+                                        <>
+                                            <Mic className="w-10 h-10 mx-auto mb-3 text-primary" />
+                                            <p className="text-sm font-medium mb-1 text-primary">
+                                                {file.name}
+                                            </p>
+                                            <p className="text-xs text-muted-foreground">
+                                                {(file.size / 1024 / 1024).toFixed(2)} MB
+                                            </p>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Mic className="w-10 h-10 mx-auto mb-3 text-muted-foreground" />
+                                            <p className="text-sm font-medium mb-1">
+                                                Upload audio file
+                                            </p>
+                                            <p className="text-xs text-muted-foreground">
+                                                MP3, WAV, M4A (max 25MB)
+                                            </p>
+                                        </>
+                                    )}
                                 </div>
                             )}
 
@@ -258,15 +365,38 @@ export function CreateStudySetModal({ open, onOpenChange }: CreateStudySetModalP
 
                             {sourceType === "IMAGE" && (
                                 <div
-                                    className="border-2 border-dashed border-white/20 rounded-xl p-8 text-center hover:border-primary/50 transition-colors cursor-pointer"
+                                    className={`border-2 border-dashed rounded-xl p-8 text-center transition-colors cursor-pointer ${file ? "border-primary bg-primary/5" : "border-white/20 hover:border-primary/50"
+                                        }`}
+                                    onClick={() => fileInputRef.current?.click()}
                                 >
-                                    <Camera className="w-10 h-10 mx-auto mb-3 text-muted-foreground" />
-                                    <p className="text-sm font-medium mb-1">
-                                        Upload image or photo
-                                    </p>
-                                    <p className="text-xs text-muted-foreground">
-                                        JPG, PNG, WEBP (max 10MB)
-                                    </p>
+                                    <input
+                                        type="file"
+                                        accept="image/*"
+                                        className="hidden"
+                                        ref={fileInputRef}
+                                        onChange={handleFileSelect}
+                                    />
+                                    {file ? (
+                                        <>
+                                            <Camera className="w-10 h-10 mx-auto mb-3 text-primary" />
+                                            <p className="text-sm font-medium mb-1 text-primary">
+                                                {file.name}
+                                            </p>
+                                            <p className="text-xs text-muted-foreground">
+                                                {(file.size / 1024 / 1024).toFixed(2)} MB
+                                            </p>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Camera className="w-10 h-10 mx-auto mb-3 text-muted-foreground" />
+                                            <p className="text-sm font-medium mb-1">
+                                                Upload image or photo
+                                            </p>
+                                            <p className="text-xs text-muted-foreground">
+                                                JPG, PNG, WEBP (max 10MB)
+                                            </p>
+                                        </>
+                                    )}
                                 </div>
                             )}
 
@@ -314,8 +444,8 @@ export function CreateStudySetModal({ open, onOpenChange }: CreateStudySetModalP
                                                 key={s}
                                                 onClick={() => setSubject(s)}
                                                 className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all cursor-pointer ${subject === s
-                                                        ? "bg-primary/20 text-primary border border-primary/30"
-                                                        : "bg-white/5 text-muted-foreground border border-transparent hover:bg-white/10"
+                                                    ? "bg-primary/20 text-primary border border-primary/30"
+                                                    : "bg-white/5 text-muted-foreground border border-transparent hover:bg-white/10"
                                                     }`}
                                             >
                                                 {s}
@@ -361,8 +491,8 @@ export function CreateStudySetModal({ open, onOpenChange }: CreateStudySetModalP
                                                 }))
                                             }
                                             className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all cursor-pointer ${quizTypes[qt.key as keyof typeof quizTypes]
-                                                    ? "bg-primary/20 text-primary border border-primary/30"
-                                                    : "bg-white/5 text-muted-foreground border border-transparent hover:bg-white/10"
+                                                ? "bg-primary/20 text-primary border border-primary/30"
+                                                : "bg-white/5 text-muted-foreground border border-transparent hover:bg-white/10"
                                                 }`}
                                         >
                                             {quizTypes[qt.key as keyof typeof quizTypes] && (
